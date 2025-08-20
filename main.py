@@ -1,4 +1,4 @@
-import os, json, time, requests, pathlib
+import os, json, time, requests, pathlib, sys
 
 LEAGUE_ID = 39
 BASE = "https://v3.football.api-sports.io"
@@ -12,7 +12,9 @@ CORNERS_FILE = STATE_DIR / "seen_corners.json"
 def headers():
     key = os.getenv("API_FOOTBALL_KEY")
     if not key:
-        raise RuntimeError("Missing API_FOOTBALL_KEY")
+        # לא מפילים את ה-Workflow, רק מדפיסים שגיאה
+        print("[err] Missing API_FOOTBALL_KEY", file=sys.stderr)
+        return None
     return {"x-apisports-key": key}
 
 def tg_send(text: str):
@@ -21,23 +23,32 @@ def tg_send(text: str):
     if not bot or not chat:
         print("ALERT:", text)   # fallback לקונסול
         return
-    url = f"https://api.telegram.org/bot{bot}/sendMessage"
-    r = requests.post(url, json={"chat_id": chat, "text": text}, timeout=20)
-    if not r.ok:
-        print("WARN TG:", r.status_code, r.text[:160])
+    try:
+        url = f"https://api.telegram.org/bot{bot}/sendMessage"
+        r = requests.post(url, json={"chat_id": chat, "text": text}, timeout=20)
+        if not r.ok:
+            print("WARN TG:", r.status_code, r.text[:200], file=sys.stderr)
+    except Exception as e:
+        print("WARN TG EXC:", e, file=sys.stderr)
 
 def get_live_fixtures():
-    r = requests.get(f"{BASE}/fixtures", headers=headers(), params={"live":"all","league":LEAGUE_ID}, timeout=20)
+    h = headers()
+    if not h: return []
+    r = requests.get(f"{BASE}/fixtures", headers=h, params={"live":"all","league":LEAGUE_ID}, timeout=20)
     r.raise_for_status()
     return r.json().get("response", [])
 
 def get_events(fid: int):
-    r = requests.get(f"{BASE}/fixtures/events", headers=headers(), params={"fixture":fid}, timeout=20)
+    h = headers()
+    if not h: return []
+    r = requests.get(f"{BASE}/fixtures/events", headers=h, params={"fixture":fid}, timeout=20)
     r.raise_for_status()
     return r.json().get("response", [])
 
 def get_stats(fid: int):
-    r = requests.get(f"{BASE}/fixtures/statistics", headers=headers(), params={"fixture":fid}, timeout=20)
+    h = headers()
+    if not h: return []
+    r = requests.get(f"{BASE}/fixtures/statistics", headers=h, params={"fixture":fid}, timeout=20)
     r.raise_for_status()
     return r.json().get("response", [])
 
@@ -74,7 +85,20 @@ def format_goal(ev, fx):
 def format_corner(team_name, hc, ac, hname, aname):
     return f"CORNER! {hname} {hc}–{ac} {aname}\nCorner to {team_name}. Corners: {hname} {hc}–{ac} {aname}"
 
+# --- סימולציה לבדיקת התראות (נדלקת ע"י SIMULATE_ALERTS=1) ---
+def simulate_alerts_if_needed():
+    if os.getenv("SIMULATE_ALERTS") == "1":
+        tg_send("✅ TEST: GOAL! Arsenal 1–0 Chelsea (12')")
+        tg_send("✅ TEST: CORNER! Arsenal 3–2 Chelsea (to Chelsea)")
+        print("[run] simulation alerts sent")
+        return True
+    return False
+
 def run_once():
+    # אם הסימולציה דולקת – שולחים הודעות בדיקה ומסיימים
+    if simulate_alerts_if_needed():
+        return
+
     fixtures = get_live_fixtures()
     if not fixtures:
         print("[run] no live EPL matches"); return
@@ -99,7 +123,7 @@ def run_once():
                 tg_send(format_goal(ev, fx))
                 seen_goals.add(gid)
         except Exception as e:
-            print("events err:", e)
+            print("events err:", e, file=sys.stderr)
 
         # ------- Corners -------
         try:
@@ -122,12 +146,14 @@ def run_once():
                 tg_send(format_corner(aname, hc, ac, hname, aname))
             corner_state[str(fid)] = {"home": hc, "away": ac}
         except Exception as e:
-            print("stats err:", e)
+            print("stats err:", e, file=sys.stderr)
 
     save_set(GOALS_FILE, seen_goals)
     save_dict(CORNERS_FILE, corner_state)
     print("[run] done at", time.strftime("%Y-%m-%d %H:%M:%S"))
 
 if __name__ == "__main__":
-    run_once()
-send_telegram_message("✅ Test notification from GitHub Actions")
+    try:
+        run_once()
+    except Exception as e:
+        print("[fatal]", e, file=sys.stderr)
