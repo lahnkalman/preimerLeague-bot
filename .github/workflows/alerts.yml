@@ -42,7 +42,7 @@ jobs:
           RUN_LOOPS: "135"             # 135*20ש' ≈ 45 דק'
           CORNERS_EVERY_N: "2"         # בדוק קרנות כל איטרציה שנייה (חוסך API)
           REQUEST_TIMEOUT: "20"        # timeout לקריאות HTTP
-          # SIMULATE_ALERTS: "1"       # הפעל רק לבדיקת טסט
+           SIMULATE_ALERTS: "1"       # הפעל רק לבדיקת טסט
         run: |
           for i in $(seq 1 ${RUN_LOOPS}); do
             python main.py
