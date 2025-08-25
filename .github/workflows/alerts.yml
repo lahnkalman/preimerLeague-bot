@@ -1,12 +1,17 @@
-name: EPL Alerts
+name: EPL Alerts (continuous)
+
+# מונע חפיפות: אם התחיל Run חדש - הישן יבוטל
+concurrency:
+  group: epl-alerts
+  cancel-in-progress: true
 
 on:
   schedule:
-    - cron: "*/2 * * * *"     # ריצה כל 2 דקות (UTC)
-  workflow_dispatch: {}        # מאפשר להריץ ידנית
+    - cron: "0,30 * * * *"   # מפעיל פעמיים בשעה (0 ו-30)
+  workflow_dispatch: {}       # מאפשר גם להריץ ידנית
 
 permissions:
-  contents: write              # כדי לשמור קבצי state אם תרצה בעתיד
+  contents: write             # כדי לשמור .state במידת הצורך
 
 jobs:
   run:
@@ -25,11 +30,29 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run script (with simulation)
+      # ריצה רציפה ~45 דקות: כל 20 שניות מפעילים את main.py
+      # אפשר לכוון את POLL_SECONDS / RUN_LOOPS לפי הצורך.
+      - name: Run bot (continuous ~45m)
         env:
           API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-         
+          # טיונינג (רשות):
+          POLL_SECONDS: "20"           # שינה בין איטרציות
+          RUN_LOOPS: "135"             # 135*20ש' ≈ 45 דק'
+          CORNERS_EVERY_N: "2"         # בדוק קרנות כל איטרציה שנייה (חוסך API)
+          REQUEST_TIMEOUT: "20"        # timeout לקריאות HTTP
+          # SIMULATE_ALERTS: "1"       # הפעל רק לבדיקת טסט
         run: |
-          python main.py
+          for i in $(seq 1 ${RUN_LOOPS}); do
+            python main.py
+            sleep ${POLL_SECONDS}
+          done
+
+      - name: Commit state files (dedupe)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .state/*.json || true
+          git commit -m "Update state [skip ci]" || echo "No changes"
+          git push || echo "No changes to push"
