@@ -1,17 +1,16 @@
 name: EPL Alerts (continuous)
 
-# מונע חפיפות: אם התחיל Run חדש - הישן יבוטל
 concurrency:
   group: epl-alerts
-  cancel-in-progress: true
+  cancel-in-progress: true   # אם מתחילה ריצה חדשה, הישנה מתבטלת
 
 on:
   schedule:
-    - cron: "0,30 * * * *"   # מפעיל פעמיים בשעה (0 ו-30)
-  workflow_dispatch: {}       # מאפשר גם להריץ ידנית
+    - cron: "0 * * * *"      # פעם בשעה (UTC)
+  workflow_dispatch: {}       # אפשר להריץ ידנית
 
 permissions:
-  contents: write             # כדי לשמור .state במידת הצורך
+  contents: write
 
 jobs:
   run:
@@ -30,29 +29,19 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      # ריצה רציפה ~45 דקות: כל 20 שניות מפעילים את main.py
-      # אפשר לכוון את POLL_SECONDS / RUN_LOOPS לפי הצורך.
-      - name: Run bot (continuous ~45m)
+      # ריצה רציפה ~120 דקות: כל X שניות מפעילים את main.py
+      - name: Run bot (continuous ~120m)
         env:
           API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          # טיונינג (רשות):
-          POLL_SECONDS: "20"           # שינה בין איטרציות
-          RUN_LOOPS: "135"             # 135*20ש' ≈ 45 דק'
-          CORNERS_EVERY_N: "2"         # בדוק קרנות כל איטרציה שנייה (חוסך API)
-          REQUEST_TIMEOUT: "20"        # timeout לקריאות HTTP
-           SIMULATE_ALERTS: "1"       # הפעל רק לבדיקת טסט
+          POLL_SECONDS: "20"      # בדיקה כל 20 שניות (אפשר 25–30 אם מוגבל במכסת API)
+          RUN_LOOPS: "360"        # 360*20s ≈ 120 דקות
+          CORNERS_EVERY_N: "2"    # בודק קרנות כל איטרציה שנייה (חוסך קריאות)
+          REQUEST_TIMEOUT: "20"
+          # SIMULATE_ALERTS: "1"  # הדלק זמנית לבדיקה בלבד
         run: |
           for i in $(seq 1 ${RUN_LOOPS}); do
             python main.py
             sleep ${POLL_SECONDS}
           done
-
-      - name: Commit state files (dedupe)
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add .state/*.json || true
-          git commit -m "Update state [skip ci]" || echo "No changes"
-          git push || echo "No changes to push"
