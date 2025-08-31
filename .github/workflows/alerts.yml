@@ -21,3 +21,7 @@
             python main.py
             sleep ${POLL_SECONDS}
           done
+on:
+  schedule:
+    - cron: "*/2 * * * *"   # כל 2 דקות
+  workflow_dispatch: {}     # מאפשר להריץ ידנית
