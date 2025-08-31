@@ -1,45 +1,19 @@
-name: EPL Alerts (continuous)
-
-concurrency:
-  group: epl-alerts
-  cancel-in-progress: true   # אם מתחילה ריצה חדשה, הישנה מתבטלת
-
-on:
-  schedule:
-    - cron: "0 * * * *"      # פעם בשעה (UTC)
-  workflow_dispatch: {}       # אפשר להריץ ידנית
-
-permissions:
-  contents: write
-
-jobs:
-  run:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      # ריצה רציפה ~120 דקות: כל X שניות מפעילים את main.py
       - name: Run bot (continuous ~120m)
         env:
           API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          POLL_SECONDS: "20"      # בדיקה כל 20 שניות (אפשר 25–30 אם מוגבל במכסת API)
-          RUN_LOOPS: "360"        # 360*20s ≈ 120 דקות
-          CORNERS_EVERY_N: "2"    # בודק קרנות כל איטרציה שנייה (חוסך קריאות)
+          LEAGUE_ID: "39"
+          POLL_SECONDS: "20"
+          RUN_LOOPS: "360"         # ~120 דקות
+          CORNERS_EVERY_N: "2"
           REQUEST_TIMEOUT: "20"
-          # SIMULATE_ALERTS: "1"  # הדלק זמנית לבדיקה בלבד
+          GOAL_ALERTS: "1"
+          CORNER_ALERTS: "1"
+          DIAG: "0"                # שנה ל-"1" אם תרצה לראות בלוגים מי המשחקים החיים
+          PARSE_MODE: ""           # אפשר לשים Markdown
+          TELEGRAM_SILENT: "0"     # "1" כדי להשתיק התראות
+          # SIMULATE_ALERTS: "1"   # רק לטסט – למחוק אח"כ
         run: |
           for i in $(seq 1 ${RUN_LOOPS}); do
             python main.py
